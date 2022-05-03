@@ -28,7 +28,7 @@ impl MainFrame {
             assert_ne!(WM_TASKBARCREATED, 0);
         });
 
-        let instance = unsafe { GetModuleHandleW(None).ok()? };
+        let instance = unsafe { GetModuleHandleW(None) }.ok()?;
         let class_name = "Mocha".to_wide();
         REGISTER_WINDOW_CLASS.call_once(|| {
             let class = WNDCLASSEXW {
@@ -86,13 +86,13 @@ impl MainFrame {
         };
 
         if let Some(this) = this.as_mut() {
-            this.handle(hwnd, msg, wparam, lparam)
+            this.handle(msg, wparam, lparam)
         } else {
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
     }
 
-    fn handle(&mut self, hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    fn handle(&mut self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         match msg {
             WM_CREATE => {
                 if let Err(e) = self.handle_create() {
@@ -105,7 +105,7 @@ impl MainFrame {
             WM_TIMER => self.handle_timer(),
             WM_APP => self.handle_app(wparam, lparam),
             _ if msg == unsafe { WM_TASKBARCREATED } => self.handle_taskbar_created(),
-            _ => return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+            _ => return unsafe { DefWindowProcW(self.hwnd, msg, wparam, lparam) },
         }
 
         LRESULT(0)
@@ -165,14 +165,10 @@ impl MainFrame {
         };
         if unsafe { GetLastInputInfo(&mut lii) }.as_bool() {
             let now = unsafe { GetTickCount() };
-            let idle_time = if lii.dwTime <= now {
-                now - lii.dwTime
-            } else {
-                u32::MAX - lii.dwTime + now
-            };
+            let idle_time = now.wrapping_sub(lii.dwTime);
 
             if 60_000 <= idle_time {
-                let inputs = vec![
+                let inputs = [
                     INPUT {
                         r#type: INPUT_KEYBOARD,
                         Anonymous: INPUT_0 {
