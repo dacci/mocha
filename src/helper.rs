@@ -1,5 +1,4 @@
 use windows::core::{Error, Result, PCWSTR};
-use windows::Win32::Foundation::{HINSTANCE, HWND};
 
 pub struct WideString(pub Vec<u16>);
 
@@ -44,5 +43,4 @@ macro_rules! impl_check_handle {
     };
 }
 
-impl_check_handle!(HINSTANCE);
-impl_check_handle!(HWND);
+impl_check_handle!(::windows::Win32::Foundation::HWND);

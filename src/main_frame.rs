@@ -25,7 +25,7 @@ pub(crate) struct MainFrame {
 
 impl MainFrame {
     pub(crate) fn new() -> Result<Box<Self>> {
-        let instance = unsafe { GetModuleHandleW(None) }.ok()?;
+        let instance = unsafe { GetModuleHandleW(None) }?;
         let class_name = "Mocha".to_wide();
         REGISTER_WINDOW_CLASS.call_once(|| {
             let class = WNDCLASSEXW {
