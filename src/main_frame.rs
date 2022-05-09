@@ -12,8 +12,10 @@ use windows::Win32::UI::Shell::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 static REGISTER_WINDOW_CLASS: Once = Once::new();
-static REGISTER_WINDOW_MESSAGE: Once = Once::new();
-static mut WM_TASKBARCREATED: u32 = 0;
+
+lazy_static::lazy_static! {
+    static ref WM_TASKBARCREATED: u32 = unsafe { RegisterWindowMessageW("TaskbarCreated") };
+}
 
 pub(crate) struct MainFrame {
     hwnd: HWND,
@@ -23,11 +25,6 @@ pub(crate) struct MainFrame {
 
 impl MainFrame {
     pub(crate) fn new() -> Result<Box<Self>> {
-        REGISTER_WINDOW_MESSAGE.call_once(|| unsafe {
-            WM_TASKBARCREATED = RegisterWindowMessageW("TaskbarCreated");
-            assert_ne!(WM_TASKBARCREATED, 0);
-        });
-
         let instance = unsafe { GetModuleHandleW(None) }.ok()?;
         let class_name = "Mocha".to_wide();
         REGISTER_WINDOW_CLASS.call_once(|| {
@@ -104,7 +101,7 @@ impl MainFrame {
             WM_COMMAND => self.handle_command(wparam, lparam),
             WM_TIMER => self.handle_timer(),
             WM_APP => self.handle_app(wparam, lparam),
-            _ if msg == unsafe { WM_TASKBARCREATED } => self.handle_taskbar_created(),
+            _ if msg == *WM_TASKBARCREATED => self.handle_taskbar_created(),
             _ => return unsafe { DefWindowProcW(self.hwnd, msg, wparam, lparam) },
         }
 
