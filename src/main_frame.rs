@@ -1,8 +1,8 @@
 use crate::helper::*;
 use std::mem::size_of;
-use std::ptr::null;
 use std::sync::Once;
 use windows::core::*;
+use windows::w;
 use windows::Win32::Foundation::*;
 use windows::Win32::System::LibraryLoader::*;
 use windows::Win32::System::Power::*;
@@ -14,7 +14,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 static REGISTER_WINDOW_CLASS: Once = Once::new();
 
 lazy_static::lazy_static! {
-    static ref WM_TASKBARCREATED: u32 = unsafe { RegisterWindowMessageW("TaskbarCreated") };
+    static ref WM_TASKBARCREATED: u32 = unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) };
 }
 
 pub(crate) struct MainFrame {
@@ -57,7 +57,7 @@ impl MainFrame {
                 None,
                 None,
                 instance,
-                result.as_mut() as *mut _ as _,
+                Some(result.as_mut() as *mut _ as _),
             )
         }
         .ok()?;
@@ -206,7 +206,7 @@ impl MainFrame {
                     menu,
                     if self.awake { MF_CHECKED } else { MF_ENABLED },
                     1,
-                    "&Keep awake",
+                    w!("&Keep awake"),
                 );
                 AppendMenuW(
                     menu,
@@ -216,13 +216,13 @@ impl MainFrame {
                         MF_ENABLED
                     },
                     2,
-                    "&Prohibit screen saver",
+                    w!("&Prohibit screen saver"),
                 );
                 AppendMenuW(menu, MF_SEPARATOR, 0, None);
-                AppendMenuW(menu, MF_ENABLED, 0, "E&xit");
+                AppendMenuW(menu, MF_ENABLED, 0, w!("E&xit"));
 
                 SetForegroundWindow(self.hwnd);
-                TrackPopupMenu(menu, TPM_RIGHTBUTTON, x, y, 0, self.hwnd, null());
+                TrackPopupMenu(menu, TPM_RIGHTBUTTON, x, y, 0, self.hwnd, None);
                 PostMessageW(self.hwnd, WM_NULL, WPARAM(0), LPARAM(0));
 
                 DestroyMenu(menu);
