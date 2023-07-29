@@ -1,6 +1,6 @@
 use crate::helper::*;
 use std::mem::size_of;
-use std::sync::Once;
+use std::sync::{Once, OnceLock};
 use windows::core::*;
 use windows::w;
 use windows::Win32::Foundation::*;
@@ -11,11 +11,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::Shell::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-static REGISTER_WINDOW_CLASS: Once = Once::new();
+static WM_TASKBARCREATED: OnceLock<u32> = OnceLock::new();
 
-lazy_static::lazy_static! {
-    static ref WM_TASKBARCREATED: u32 = unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) };
-}
+static REGISTER_WINDOW_CLASS: Once = Once::new();
 
 pub(crate) struct MainFrame {
     hwnd: HWND,
@@ -25,6 +23,8 @@ pub(crate) struct MainFrame {
 
 impl MainFrame {
     pub(crate) fn new() -> Result<Box<Self>> {
+        WM_TASKBARCREATED.get_or_init(|| unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) });
+
         let instance = unsafe { GetModuleHandleW(None) }?;
         let class_name = "Mocha".to_wide();
         REGISTER_WINDOW_CLASS.call_once(|| {
@@ -101,7 +101,7 @@ impl MainFrame {
             WM_COMMAND => self.handle_command(wparam, lparam),
             WM_TIMER => self.handle_timer(),
             WM_APP => self.handle_app(wparam, lparam),
-            _ if msg == *WM_TASKBARCREATED => self.handle_taskbar_created(),
+            _ if msg == *WM_TASKBARCREATED.get().unwrap() => self.handle_taskbar_created(),
             _ => return unsafe { DefWindowProcW(self.hwnd, msg, wparam, lparam) },
         }
 
