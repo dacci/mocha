@@ -2,7 +2,6 @@ use crate::helper::*;
 use std::mem::size_of;
 use std::sync::{Once, OnceLock};
 use windows::core::*;
-use windows::w;
 use windows::Win32::Foundation::*;
 use windows::Win32::System::LibraryLoader::*;
 use windows::Win32::System::Power::*;
@@ -31,7 +30,7 @@ impl MainFrame {
             let class = WNDCLASSEXW {
                 cbSize: size_of::<WNDCLASSEXW>() as _,
                 lpfnWndProc: Some(Self::wnd_proc),
-                hInstance: instance,
+                hInstance: instance.into(),
                 lpszClassName: class_name.as_pcwstr(),
                 ..Default::default()
             };
@@ -130,7 +129,7 @@ impl MainFrame {
     fn handle_command(&mut self, wparam: WPARAM, _: LPARAM) {
         match wparam.0 {
             0 => {
-                unsafe { DestroyWindow(self.hwnd) };
+                let _ = unsafe { DestroyWindow(self.hwnd) };
             }
             1 => {
                 self.awake = !self.awake;
@@ -148,7 +147,7 @@ impl MainFrame {
                 if self.prohibit_ss {
                     unsafe { SetTimer(self.hwnd, 0, 1000, None) };
                 } else {
-                    unsafe { KillTimer(self.hwnd, 0) };
+                    let _ = unsafe { KillTimer(self.hwnd, 0) };
                 }
             }
             _ => {}
@@ -202,13 +201,13 @@ impl MainFrame {
             unsafe {
                 let menu = CreatePopupMenu().unwrap();
 
-                AppendMenuW(
+                let _ = AppendMenuW(
                     menu,
                     if self.awake { MF_CHECKED } else { MF_ENABLED },
                     1,
                     w!("&Keep awake"),
                 );
-                AppendMenuW(
+                let _ = AppendMenuW(
                     menu,
                     if self.prohibit_ss {
                         MF_CHECKED
@@ -218,14 +217,14 @@ impl MainFrame {
                     2,
                     w!("&Prohibit screen saver"),
                 );
-                AppendMenuW(menu, MF_SEPARATOR, 0, None);
-                AppendMenuW(menu, MF_ENABLED, 0, w!("E&xit"));
+                let _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
+                let _ = AppendMenuW(menu, MF_ENABLED, 0, w!("E&xit"));
 
                 SetForegroundWindow(self.hwnd);
-                TrackPopupMenu(menu, TPM_RIGHTBUTTON, x, y, 0, self.hwnd, None);
-                PostMessageW(self.hwnd, WM_NULL, WPARAM(0), LPARAM(0));
+                let _ = TrackPopupMenu(menu, TPM_RIGHTBUTTON, x, y, 0, self.hwnd, None);
+                let _ = PostMessageW(self.hwnd, WM_NULL, WPARAM(0), LPARAM(0));
 
-                DestroyMenu(menu);
+                let _ = DestroyMenu(menu);
             }
         }
     }
