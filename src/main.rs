@@ -3,13 +3,20 @@
 mod helper;
 mod main_frame;
 
+use crate::helper::ScopedHandle;
 use crate::main_frame::MainFrame;
-use windows::core::{Error, Result};
+use windows::core::{w, Error, Result};
+use windows::Win32::Foundation::GetLastError;
+use windows::Win32::System::Threading::CreateMutexW;
 use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, GetMessageW, TranslateMessage, MSG,
 };
 
 fn main() -> Result<()> {
+    let _mutex =
+        unsafe { CreateMutexW(None, true, w!("github.com/dacci/mocha")).map(ScopedHandle)? };
+    unsafe { GetLastError() }?;
+
     let _frame = MainFrame::new();
 
     let mut msg = MSG::default();

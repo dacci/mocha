@@ -1,4 +1,5 @@
 use windows::core::{Error, Result, PCWSTR};
+use windows::Win32::Foundation::{CloseHandle, HANDLE};
 
 pub struct WideString(pub Vec<u16>);
 
@@ -44,3 +45,14 @@ macro_rules! impl_check_handle {
 }
 
 impl_check_handle!(::windows::Win32::Foundation::HWND);
+
+#[repr(transparent)]
+pub struct ScopedHandle(pub HANDLE);
+
+impl Drop for ScopedHandle {
+    fn drop(&mut self) {
+        if !self.0.is_invalid() {
+            let _ = unsafe { CloseHandle(self.0) };
+        }
+    }
+}
