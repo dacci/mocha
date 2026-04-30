@@ -38,7 +38,7 @@ impl MainFrame {
         });
 
         let mut result = Box::new(MainFrame {
-            hwnd: HWND(0),
+            hwnd: HWND::default(),
             awake: false,
             prohibit_ss: false,
         });
@@ -55,11 +55,10 @@ impl MainFrame {
                 CW_USEDEFAULT,
                 None,
                 None,
-                instance,
+                Some(instance.into()),
                 Some(result.as_mut() as *mut _ as _),
-            )
-        }
-        .ok()?;
+            )?
+        };
 
         Ok(result)
     }
@@ -107,8 +106,8 @@ impl MainFrame {
     fn handle_create(&mut self) -> Result<()> {
         self.add_icon()?;
 
-        unsafe { SendMessageW(self.hwnd, WM_COMMAND, WPARAM(1), LPARAM(0)) };
-        unsafe { SendMessageW(self.hwnd, WM_COMMAND, WPARAM(2), LPARAM(0)) };
+        unsafe { SendMessageW(self.hwnd, WM_COMMAND, Some(WPARAM(1)), Some(LPARAM(0))) };
+        unsafe { SendMessageW(self.hwnd, WM_COMMAND, Some(WPARAM(2)), Some(LPARAM(0))) };
 
         Ok(())
     }
@@ -119,7 +118,7 @@ impl MainFrame {
             hWnd: self.hwnd,
             ..Default::default()
         };
-        unsafe { Shell_NotifyIconW(NIM_DELETE, &icon) };
+        let _ = unsafe { Shell_NotifyIconW(NIM_DELETE, &icon) };
         unsafe { PostQuitMessage(0) };
     }
 
@@ -142,9 +141,9 @@ impl MainFrame {
                 self.prohibit_ss = !self.prohibit_ss;
 
                 if self.prohibit_ss {
-                    unsafe { SetTimer(self.hwnd, 0, 1000, None) };
+                    unsafe { SetTimer(Some(self.hwnd), 0, 1000, None) };
                 } else {
-                    let _ = unsafe { KillTimer(self.hwnd, 0) };
+                    let _ = unsafe { KillTimer(Some(self.hwnd), 0) };
                 }
             }
             _ => {}
@@ -217,9 +216,9 @@ impl MainFrame {
                 let _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
                 let _ = AppendMenuW(menu, MF_ENABLED, 0, w!("E&xit"));
 
-                SetForegroundWindow(self.hwnd);
-                let _ = TrackPopupMenu(menu, TPM_RIGHTBUTTON, x, y, 0, self.hwnd, None);
-                let _ = PostMessageW(self.hwnd, WM_NULL, WPARAM(0), LPARAM(0));
+                let _ = SetForegroundWindow(self.hwnd);
+                let _ = TrackPopupMenu(menu, TPM_RIGHTBUTTON, x, y, None, self.hwnd, None);
+                let _ = PostMessageW(Some(self.hwnd), WM_NULL, WPARAM(0), LPARAM(0));
 
                 let _ = DestroyMenu(menu);
             }

@@ -15,7 +15,7 @@ use windows::core::{Error, Result, w};
 fn main() -> Result<()> {
     let _mutex =
         unsafe { CreateMutexW(None, true, w!("github.com/dacci/mocha")).map(ScopedHandle)? };
-    unsafe { GetLastError() }?;
+    unsafe { GetLastError().ok()? };
 
     let _frame = MainFrame::new();
 
@@ -24,9 +24,9 @@ fn main() -> Result<()> {
         let r = unsafe { GetMessageW(&mut msg, None, 0, 0) };
         match r.0 {
             0 => break Ok(()),
-            -1 => break Err(Error::from_win32()),
+            -1 => break Err(Error::from_thread()),
             _ => unsafe {
-                TranslateMessage(&msg);
+                let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             },
         }

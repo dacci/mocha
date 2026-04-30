@@ -1,5 +1,5 @@
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
-use windows::core::{Error, PCWSTR, Result};
+use windows::core::PCWSTR;
 
 pub struct WideString(pub Vec<u16>);
 
@@ -25,26 +25,6 @@ impl ToWide for &str {
         WideString(self.encode_utf16().chain(Some(0)).collect())
     }
 }
-
-pub trait CheckHandle: Sized {
-    fn ok(self) -> Result<Self>;
-}
-
-macro_rules! impl_check_handle {
-    ($t:ty) => {
-        impl CheckHandle for $t {
-            fn ok(self) -> Result<Self> {
-                if self.0 != 0 {
-                    Ok(self)
-                } else {
-                    Err(Error::from_win32())
-                }
-            }
-        }
-    };
-}
-
-impl_check_handle!(::windows::Win32::Foundation::HWND);
 
 #[repr(transparent)]
 pub struct ScopedHandle(pub HANDLE);
