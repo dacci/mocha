@@ -1,7 +1,6 @@
 use crate::helper::*;
 use std::mem::size_of;
 use std::sync::{Once, OnceLock};
-use windows::core::*;
 use windows::Win32::Foundation::*;
 use windows::Win32::System::LibraryLoader::*;
 use windows::Win32::System::Power::*;
@@ -9,6 +8,7 @@ use windows::Win32::System::SystemInformation::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::Shell::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
+use windows::core::*;
 
 static WM_TASKBARCREATED: OnceLock<u32> = OnceLock::new();
 
@@ -65,26 +65,23 @@ impl MainFrame {
     }
 
     #[allow(unused)]
-    unsafe extern "system" fn wnd_proc(
-        hwnd: HWND,
-        msg: u32,
-        wparam: WPARAM,
-        lparam: LPARAM,
-    ) -> LRESULT {
+    extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         let this = if msg == WM_NCCREATE {
-            let cs = lparam.0 as *const CREATESTRUCTW;
-            let this = (*cs).lpCreateParams as *mut Self;
-            (*this).hwnd = hwnd;
-            SetWindowLongPtrW(hwnd, GWLP_USERDATA, this as _);
-            this
+            unsafe {
+                let cs = lparam.0 as *const CREATESTRUCTW;
+                let this = (*cs).lpCreateParams as *mut Self;
+                (*this).hwnd = hwnd;
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, this as _);
+                this
+            }
         } else {
-            GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Self
+            unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Self }
         };
 
-        if let Some(this) = this.as_mut() {
+        if let Some(this) = unsafe { this.as_mut() } {
             this.handle(msg, wparam, lparam)
         } else {
-            DefWindowProcW(hwnd, msg, wparam, lparam)
+            unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
         }
     }
 

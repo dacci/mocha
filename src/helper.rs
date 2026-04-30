@@ -1,5 +1,5 @@
-use windows::core::{Error, Result, PCWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::core::{Error, PCWSTR, Result};
 
 pub struct WideString(pub Vec<u16>);
 
