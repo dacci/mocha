@@ -25,11 +25,6 @@ jobs:
           target: x86_64-pc-windows-msvc
       - run: cargo test --all-features
       - run: cargo build --release
-      - uses: lando/code-sign-action@v3
-        with:
-          file: target/release/mocha.exe
-          certificate-data: ${{ secrets.CERTIFICATE }}
-          certificate-password: ${{ secrets.CERTIFICATE_PASSWORD }}
       - uses: softprops/action-gh-release@v3
         with:
           files: target/release/mocha.exe
