@@ -25,6 +25,11 @@ jobs:
           target: x86_64-pc-windows-msvc
       - run: cargo test --all-features
       - run: cargo build --release
+      - uses: dlemstra/code-sign-action@v1
+        with:
+          certificate: ${{ secrets.CERTIFICATE }}
+          password: ${{ secrets.CERTIFICATE_PASSWORD }}
+          files: target/release/mocha.exe
       - uses: softprops/action-gh-release@v3
         with:
           files: target/release/mocha.exe
