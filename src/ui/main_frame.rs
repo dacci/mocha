@@ -1,6 +1,8 @@
+use super::WM;
 use crate::helper::*;
 use std::mem::size_of;
-use std::sync::{Once, OnceLock};
+use std::pin::Pin;
+use std::sync::OnceLock;
 use windows::Win32::Foundation::*;
 use windows::Win32::System::LibraryLoader::*;
 use windows::Win32::System::Power::*;
@@ -10,44 +12,48 @@ use windows::Win32::UI::Shell::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::*;
 
-static WM_TASKBARCREATED: OnceLock<u32> = OnceLock::new();
+static TASKBAR_CREATED: OnceLock<u32> = OnceLock::new();
 
-static REGISTER_WINDOW_CLASS: Once = Once::new();
-
-pub(crate) struct MainFrame {
+pub struct MainFrame {
     hwnd: HWND,
     awake: bool,
     prohibit_ss: bool,
 }
 
 impl MainFrame {
-    pub(crate) fn new() -> Result<Box<Self>> {
-        WM_TASKBARCREATED.get_or_init(|| unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) });
+    const CLASS_NAME: PCWSTR = w!("Mocha");
 
+    pub fn register_class() -> Result<u16> {
         let instance = unsafe { GetModuleHandleW(None) }?;
-        let class_name = "Mocha".to_wide();
-        REGISTER_WINDOW_CLASS.call_once(|| {
-            let class = WNDCLASSEXW {
-                cbSize: size_of::<WNDCLASSEXW>() as _,
-                lpfnWndProc: Some(Self::wnd_proc),
-                hInstance: instance.into(),
-                lpszClassName: class_name.as_pcwstr(),
-                ..Default::default()
-            };
-            assert_ne!(unsafe { RegisterClassExW(&class) }, 0);
-        });
+        let class = WNDCLASSEXW {
+            cbSize: size_of::<WNDCLASSEXW>() as _,
+            lpfnWndProc: Some(Self::wnd_proc),
+            cbWndExtra: size_of::<usize>() as _,
+            hInstance: instance.into(),
+            lpszClassName: Self::CLASS_NAME,
+            ..Default::default()
+        };
+        match unsafe { RegisterClassExW(&class) } {
+            0 => Err(Error::from_thread()),
+            atom => Ok(atom),
+        }
+    }
 
-        let mut result = Box::new(MainFrame {
-            hwnd: HWND::default(),
+    pub fn new() -> Pin<Box<Self>> {
+        Box::pin(MainFrame {
+            hwnd: Default::default(),
             awake: false,
             prohibit_ss: false,
-        });
+        })
+    }
 
+    pub fn create(self: Pin<&mut Self>) -> Result<HWND> {
+        let instance = unsafe { GetModuleHandleW(None) }?;
         unsafe {
             CreateWindowExW(
                 WS_EX_OVERLAPPEDWINDOW,
-                class_name.as_pcwstr(),
-                class_name.as_pcwstr(),
+                Self::CLASS_NAME,
+                Self::CLASS_NAME,
                 WS_OVERLAPPEDWINDOW,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
@@ -56,58 +62,58 @@ impl MainFrame {
                 None,
                 None,
                 Some(instance.into()),
-                Some(result.as_mut() as *mut _ as _),
-            )?
-        };
-
-        Ok(result)
-    }
-
-    #[allow(unused)]
-    extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        let this = if msg == WM_NCCREATE {
-            unsafe {
-                let cs = lparam.0 as *const CREATESTRUCTW;
-                let this = (*cs).lpCreateParams as *mut Self;
-                (*this).hwnd = hwnd;
-                SetWindowLongPtrW(hwnd, GWLP_USERDATA, this as _);
-                this
-            }
-        } else {
-            unsafe { GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Self }
-        };
-
-        if let Some(this) = unsafe { this.as_mut() } {
-            this.handle(msg, wparam, lparam)
-        } else {
-            unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+                Some(self.get_mut() as *mut _ as _),
+            )
         }
     }
 
-    fn handle(&mut self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        match msg {
-            WM_CREATE => {
-                if let Err(e) = self.handle_create() {
+    extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+        let self_ = unsafe {
+            if msg == WM_NCCREATE {
+                let cs = (lp.0 as *const CREATESTRUCTW).as_ref_unchecked();
+                SetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0), cs.lpCreateParams as _);
+
+                let self_ = cs.lpCreateParams as *mut Self;
+                (*self_).hwnd = hwnd;
+                self_
+            } else {
+                GetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0)) as *mut Self
+            }
+        };
+
+        match unsafe { self_.as_mut() } {
+            Some(self_) => self_.handle(msg, wp, lp),
+            None => unsafe { DefWindowProcW(hwnd, msg, wp, lp) },
+        }
+    }
+
+    fn handle(&mut self, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+        let &taskbar_created =
+            TASKBAR_CREATED.get_or_init(|| unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) });
+
+        match WM::crack(msg, wp, lp) {
+            WM::Create(cs) => {
+                if let Err(e) = self.handle_create(cs) {
                     eprintln!("{e}");
                     return LRESULT(-1);
                 }
             }
-            WM_DESTROY => self.handle_destroy(),
-            WM_COMMAND => self.handle_command(wparam, lparam),
-            WM_TIMER => self.handle_timer(),
-            WM_APP => self.handle_app(wparam, lparam),
-            _ if msg == *WM_TASKBARCREATED.get().unwrap() => self.handle_taskbar_created(),
-            _ => return unsafe { DefWindowProcW(self.hwnd, msg, wparam, lparam) },
+            WM::Destroy => self.handle_destroy(),
+            WM::Command(code, id, hwnd) => self.handle_command(code, id, hwnd),
+            WM::Timer(id) => self.handle_timer(id),
+            WM::App(msg, wp, lp) => self.handle_app(msg, wp, lp),
+            WM::Registered(msg, ..) if msg == taskbar_created => self.handle_taskbar_created(),
+            _ => return unsafe { DefWindowProcW(self.hwnd, msg, wp, lp) },
         }
 
         LRESULT(0)
     }
 
-    fn handle_create(&mut self) -> Result<()> {
+    fn handle_create(&mut self, _: *const CREATESTRUCTW) -> Result<()> {
         self.add_icon()?;
 
-        unsafe { SendMessageW(self.hwnd, WM_COMMAND, Some(WPARAM(1)), Some(LPARAM(0))) };
-        unsafe { SendMessageW(self.hwnd, WM_COMMAND, Some(WPARAM(2)), Some(LPARAM(0))) };
+        unsafe { SendMessageW(self.hwnd, WM_COMMAND, Some(WPARAM(1)), None) };
+        unsafe { SendMessageW(self.hwnd, WM_COMMAND, Some(WPARAM(2)), None) };
 
         Ok(())
     }
@@ -122,8 +128,8 @@ impl MainFrame {
         unsafe { PostQuitMessage(0) };
     }
 
-    fn handle_command(&mut self, wparam: WPARAM, _: LPARAM) {
-        match wparam.0 {
+    fn handle_command(&mut self, _: u16, id: i16, _: HWND) {
+        match id {
             0 => {
                 let _ = unsafe { DestroyWindow(self.hwnd) };
             }
@@ -150,7 +156,7 @@ impl MainFrame {
         }
     }
 
-    fn handle_timer(&mut self) {
+    fn handle_timer(&mut self, _: usize) {
         let mut lii = LASTINPUTINFO {
             cbSize: size_of::<LASTINPUTINFO>() as _,
             dwTime: 0,
@@ -191,9 +197,9 @@ impl MainFrame {
         }
     }
 
-    fn handle_app(&mut self, wparam: WPARAM, lparam: LPARAM) {
-        if lparam.0 == WM_CONTEXTMENU as _ {
-            let (x, y) = ((wparam.0 & 0xFFFF) as i32, (wparam.0 >> 16) as i32);
+    fn handle_app(&mut self, _: u32, wp: WPARAM, lp: LPARAM) {
+        if lp.0 == WM_CONTEXTMENU as _ {
+            let (x, y) = ((wp.0 & 0xFFFF) as i32, (wp.0 >> 16) as i32);
             unsafe {
                 let menu = CreatePopupMenu().unwrap();
 
@@ -241,7 +247,7 @@ impl MainFrame {
             Anonymous: NOTIFYICONDATAW_0 {
                 uVersion: NOTIFYICON_VERSION_4,
             },
-            ..NOTIFYICONDATAW::default()
+            ..Default::default()
         };
         if unsafe { Shell_NotifyIconW(NIM_ADD, &icon) }.as_bool()
             && unsafe { Shell_NotifyIconW(NIM_SETVERSION, &icon) }.as_bool()
