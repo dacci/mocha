@@ -166,12 +166,13 @@ impl MainFrame {
             let idle_time = now.wrapping_sub(lii.dwTime);
 
             if 60_000 <= idle_time {
+                let vk = VIRTUAL_KEY(0);
                 let inputs = [
                     INPUT {
                         r#type: INPUT_KEYBOARD,
                         Anonymous: INPUT_0 {
                             ki: KEYBDINPUT {
-                                wVk: VK_SHIFT,
+                                wVk: vk,
                                 wScan: 0,
                                 dwFlags: KEYBD_EVENT_FLAGS(0),
                                 time: 0,
@@ -183,7 +184,7 @@ impl MainFrame {
                         r#type: INPUT_KEYBOARD,
                         Anonymous: INPUT_0 {
                             ki: KEYBDINPUT {
-                                wVk: VK_SHIFT,
+                                wVk: vk,
                                 wScan: 0,
                                 dwFlags: KEYEVENTF_KEYUP,
                                 time: 0,
